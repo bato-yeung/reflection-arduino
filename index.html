@@ -13,6 +13,7 @@
     }
     h1, p { position: relative; z-index: 1; color: #222; text-shadow: 0 0 8px #fff, 0 0 2px #fff; }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/d3-delaunay@6.0.2/dist/d3-delaunay.min.js"></script>
 </head>
 <body>
   <canvas id="stained-glass-bg"></canvas>
@@ -32,21 +33,20 @@
     // 產生隨機點作為多邊形中心
     const CELL_COUNT = 64;
     let points = [];
-    for (let i = 0; i < CELL_COUNT; i++) {
-      points.push({
-        x: Math.random() * w,
-        y: Math.random() * h,
-        hue: Math.random() * 360,
-        speed: Math.random() * 0.2 + 0.05
-      });
+    function randomPoints() {
+      points = [];
+      for (let i = 0; i < CELL_COUNT; i++) {
+        points.push({
+          x: Math.random() * w,
+          y: Math.random() * h,
+          hue: Math.random() * 360,
+          speed: Math.random() * 0.2 + 0.05
+        });
+      }
     }
+    randomPoints();
 
-    function distance2(a, b) {
-      let dx = a.x - b.x, dy = a.y - b.y;
-      return dx*dx + dy*dy;
-    }
-
-    function draw() {
+    function drawVoronoi() {
       ctx.clearRect(0, 0, w, h);
 
       // 動態調整每個點的色相
@@ -54,32 +54,39 @@
         p.hue = (p.hue + p.speed) % 360;
       }
 
-      // 每個像素找最近的點，著色（1x1像素，提升細緻度）
-      let img = ctx.createImageData(w * dpr, h * dpr);
-      let data = img.data;
-      for (let y = 0; y < h * dpr; y++) {
-        for (let x = 0; x < w * dpr; x++) {
-          let fx = x / dpr, fy = y / dpr;
-          let minD = 1e9, minI = 0;
-          for (let i = 0; i < points.length; i++) {
-            let d = (points[i].x - fx) ** 2 + (points[i].y - fy) ** 2;
-            if (d < minD) { minD = d; minI = i; }
-          }
-          let hue = points[minI].hue;
-          let sat = 75;
-          let light = 60;
-          let color = hslToRgb(hue/360, sat/100, light/100);
-          let idx = 4 * (y * w * dpr + x);
-          data[idx] = color[0];
-          data[idx+1] = color[1];
-          data[idx+2] = color[2];
-          data[idx+3] = 255;
+      // 用 d3-delaunay 計算 Voronoi
+      const delaunay = d3.Delaunay.from(points, d => d.x, d => d.y);
+      const voronoi = delaunay.voronoi([0, 0, w, h]);
+
+      for (let i = 0; i < points.length; i++) {
+        const cell = voronoi.cellPolygon(i);
+        if (!cell) continue;
+        let p = points[i];
+        let hue = p.hue;
+        let sat = 75;
+        let light = 60;
+        let color = hslToRgb(hue/360, sat/100, light/100);
+
+        ctx.beginPath();
+        ctx.moveTo(cell[0][0], cell[0][1]);
+        for (let j = 1; j < cell.length; j++) {
+          ctx.lineTo(cell[j][0], cell[j][1]);
         }
+        ctx.closePath();
+        ctx.fillStyle = `rgb(${color[0]},${color[1]},${color[2]})`;
+        ctx.fill();
+
+        // 畫圓滑黑邊
+        ctx.save();
+        ctx.strokeStyle = "#222";
+        ctx.lineWidth = 2.2;
+        ctx.shadowColor = "#000";
+        ctx.shadowBlur = 2;
+        ctx.stroke();
+        ctx.restore();
       }
 
-      ctx.putImageData(img, 0, 0);
-
-      requestAnimationFrame(draw);
+      requestAnimationFrame(drawVoronoi);
     }
 
     // HSL to RGB helper
@@ -114,19 +121,12 @@
       canvas.style.width = w + "px";
       canvas.style.height = h + "px";
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      // 重新分布點
-      points = [];
-      for (let i = 0; i < CELL_COUNT; i++) {
-        points.push({
-          x: Math.random() * w,
-          y: Math.random() * h,
-          hue: Math.random() * 360,
-          speed: Math.random() * 0.2 + 0.05
-        });
-      }
+      randomPoints();
     });
 
-    draw();
+    drawVoronoi();
   </script>
+</body>
+</html>
 </body>
 </html>

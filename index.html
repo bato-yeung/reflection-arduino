@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>銀河動態背景</title>
+  <style>
+    body, html { margin: 0; padding: 0; overflow: hidden; background: black; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+  <canvas id="galaxy"></canvas>
+  <script>
+    const canvas = document.getElementById('galaxy');
+    const ctx = canvas.getContext('2d');
+    let w = window.innerWidth;
+    let h = window.innerHeight;
+    canvas.width = w;
+    canvas.height = h;
+
+    function randomStar() {
+      const angle = Math.random() * 2 * Math.PI;
+      const radius = Math.pow(Math.random(), 2) * (w/2);
+      const z = Math.random(); // 0(遠)~1(近)
+      return {
+        angle: angle,
+        radius: radius,
+        z: z,
+        baseR: Math.random() * 1.5 + 0.2,
+        baseAlpha: Math.random() * 0.5 + 0.5,
+        speed: (Math.random() * 0.002 + 0.001) * (0.3 + 0.7 * z), // 近的快
+        twinkle: Math.random() * Math.PI * 2, // 閃爍相位
+        twinkleSpeed: Math.random() * 0.05 + 0.01 // 閃爍速度
+      };
+    }
+
+    let stars = [];
+    const STAR_COUNT = 800;
+    for (let i = 0; i < STAR_COUNT; i++) {
+      stars.push(randomStar());
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, w, h);
+      // 畫出星雲
+      let grad = ctx.createRadialGradient(w/2, h/2, 0, w/2, h/2, w/2);
+      grad.addColorStop(0, 'rgba(80,80,160,0.5)');
+      grad.addColorStop(0.5, 'rgba(20,20,40,0.2)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      // 畫出星星
+      for (let star of stars) {
+        // 強化景深：z越小越遠，縮小且更透明，z越大越近更大更亮
+        const perspective = 0.2 + 1.3 * star.z; // 0.2~1.5
+        const x = w/2 + Math.cos(star.angle) * star.radius * 0.7 * perspective;
+        const y = h/2 + Math.sin(star.angle) * star.radius * 0.3 * perspective;
+        const r = star.baseR * (0.2 + 1.3 * star.z); // 近的更大，遠的更小
+
+        // 星星閃爍
+        star.twinkle += star.twinkleSpeed;
+        const twinkleAlpha = 0.7 + 0.3 * Math.sin(star.twinkle);
+        const alpha = star.baseAlpha * (0.1 + 0.9 * star.z) * twinkleAlpha; // 遠的更淡，近的更亮
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, 2 * Math.PI);
+        ctx.fillStyle = '#fff';
+        ctx.shadowColor = '#fff';
+        ctx.shadowBlur = 12 * perspective;
+        ctx.fill();
+        ctx.restore();
+
+        // 星星繞銀河中心旋轉
+        star.angle += star.speed;
+      }
+
+      requestAnimationFrame(draw);
+    }
+
+    draw();
+
+    window.addEventListener('resize', () => {
+      w = window.innerWidth;
+      h = window.innerHeight;
+      canvas.width = w;
+      canvas.height = h;
+    });
+  </script>
+</body>
+</html>

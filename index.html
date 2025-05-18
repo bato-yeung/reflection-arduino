@@ -2,92 +2,131 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
-  <title>銀河動態背景</title>
+  <title>首頁 - 彩繪玻璃動態背景</title>
   <style>
-    body, html { margin: 0; padding: 0; overflow: hidden; background: black; }
-    canvas { display: block; }
+    body, html { margin: 0; padding: 0; overflow: hidden; }
+    #stained-glass-bg {
+      position: fixed;
+      left: 0; top: 0; width: 100vw; height: 100vh;
+      z-index: -1;
+      display: block;
+    }
+    h1, p { position: relative; z-index: 1; color: #222; text-shadow: 0 0 8px #fff, 0 0 2px #fff; }
   </style>
 </head>
 <body>
-  <canvas id="galaxy"></canvas>
+  <canvas id="stained-glass-bg"></canvas>
+  <h1>歡迎</h1>
+  <p>這是彩繪玻璃動態背景效果</p>
   <script>
-    const canvas = document.getElementById('galaxy');
+    const canvas = document.getElementById('stained-glass-bg');
     const ctx = canvas.getContext('2d');
-    let w = window.innerWidth;
-    let h = window.innerHeight;
-    canvas.width = w;
-    canvas.height = h;
+    let dpr = window.devicePixelRatio || 1;
+    let w = window.innerWidth, h = window.innerHeight;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width = w + "px";
+    canvas.style.height = h + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    function randomStar() {
-      const angle = Math.random() * 2 * Math.PI;
-      const radius = Math.pow(Math.random(), 2) * (w/2);
-      const z = Math.random(); // 0(遠)~1(近)
-      return {
-        angle: angle,
-        radius: radius,
-        z: z,
-        baseR: Math.random() * 1.5 + 0.2,
-        baseAlpha: Math.random() * 0.5 + 0.5,
-        speed: (Math.random() * 0.002 + 0.001) * (0.3 + 0.7 * z), // 近的快
-        twinkle: Math.random() * Math.PI * 2, // 閃爍相位
-        twinkleSpeed: Math.random() * 0.05 + 0.01 // 閃爍速度
-      };
+    // 產生隨機點作為多邊形中心
+    const CELL_COUNT = 64;
+    let points = [];
+    for (let i = 0; i < CELL_COUNT; i++) {
+      points.push({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        hue: Math.random() * 360,
+        speed: Math.random() * 0.2 + 0.05
+      });
     }
 
-    let stars = [];
-    const STAR_COUNT = 800;
-    for (let i = 0; i < STAR_COUNT; i++) {
-      stars.push(randomStar());
+    function distance2(a, b) {
+      let dx = a.x - b.x, dy = a.y - b.y;
+      return dx*dx + dy*dy;
     }
 
     function draw() {
       ctx.clearRect(0, 0, w, h);
-      // 畫出星雲
-      let grad = ctx.createRadialGradient(w/2, h/2, 0, w/2, h/2, w/2);
-      grad.addColorStop(0, 'rgba(80,80,160,0.5)');
-      grad.addColorStop(0.5, 'rgba(20,20,40,0.2)');
-      grad.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, w, h);
 
-      // 畫出星星
-      for (let star of stars) {
-        // 強化景深：z越小越遠，縮小且更透明，z越大越近更大更亮
-        const perspective = 0.2 + 1.3 * star.z; // 0.2~1.5
-        const x = w/2 + Math.cos(star.angle) * star.radius * 0.7 * perspective;
-        const y = h/2 + Math.sin(star.angle) * star.radius * 0.3 * perspective;
-        const r = star.baseR * (0.2 + 1.3 * star.z); // 近的更大，遠的更小
-
-        // 星星閃爍
-        star.twinkle += star.twinkleSpeed;
-        const twinkleAlpha = 0.7 + 0.3 * Math.sin(star.twinkle);
-        const alpha = star.baseAlpha * (0.1 + 0.9 * star.z) * twinkleAlpha; // 遠的更淡，近的更亮
-
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, 2 * Math.PI);
-        ctx.fillStyle = '#fff';
-        ctx.shadowColor = '#fff';
-        ctx.shadowBlur = 12 * perspective;
-        ctx.fill();
-        ctx.restore();
-
-        // 星星繞銀河中心旋轉
-        star.angle += star.speed;
+      // 動態調整每個點的色相
+      for (let p of points) {
+        p.hue = (p.hue + p.speed) % 360;
       }
+
+      // 每個像素找最近的點，著色（1x1像素，提升細緻度）
+      let img = ctx.createImageData(w * dpr, h * dpr);
+      let data = img.data;
+      for (let y = 0; y < h * dpr; y++) {
+        for (let x = 0; x < w * dpr; x++) {
+          let fx = x / dpr, fy = y / dpr;
+          let minD = 1e9, minI = 0;
+          for (let i = 0; i < points.length; i++) {
+            let d = (points[i].x - fx) ** 2 + (points[i].y - fy) ** 2;
+            if (d < minD) { minD = d; minI = i; }
+          }
+          let hue = points[minI].hue;
+          let sat = 75;
+          let light = 60;
+          let color = hslToRgb(hue/360, sat/100, light/100);
+          let idx = 4 * (y * w * dpr + x);
+          data[idx] = color[0];
+          data[idx+1] = color[1];
+          data[idx+2] = color[2];
+          data[idx+3] = 255;
+        }
+      }
+
+      ctx.putImageData(img, 0, 0);
 
       requestAnimationFrame(draw);
     }
 
-    draw();
+    // HSL to RGB helper
+    function hslToRgb(h, s, l) {
+      let r, g, b;
+      if (s == 0) {
+        r = g = b = l;
+      } else {
+        function hue2rgb(p, q, t) {
+          if (t < 0) t += 1;
+          if (t > 1) t -= 1;
+          if (t < 1/6) return p + (q - p) * 6 * t;
+          if (t < 1/2) return q;
+          if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+          return p;
+        }
+        let q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        let p = 2 * l - q;
+        r = hue2rgb(p, q, h + 1/3);
+        g = hue2rgb(p, q, h);
+        b = hue2rgb(p, q, h - 1/3);
+      }
+      return [Math.round(r*255), Math.round(g*255), Math.round(b*255)];
+    }
 
     window.addEventListener('resize', () => {
+      dpr = window.devicePixelRatio || 1;
       w = window.innerWidth;
       h = window.innerHeight;
-      canvas.width = w;
-      canvas.height = h;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = w + "px";
+      canvas.style.height = h + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // 重新分布點
+      points = [];
+      for (let i = 0; i < CELL_COUNT; i++) {
+        points.push({
+          x: Math.random() * w,
+          y: Math.random() * h,
+          hue: Math.random() * 360,
+          speed: Math.random() * 0.2 + 0.05
+        });
+      }
     });
+
+    draw();
   </script>
 </body>
 </html>

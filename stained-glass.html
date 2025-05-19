@@ -29,6 +29,19 @@
       <option value="mono-yellow">單色黃</option>
       <option value="mono-purple">單色紫</option>
     </select>
+    <label style="color:#222;font-weight:bold;margin-left:12px;">
+      <input type="checkbox" id="kaleidoToggle"> 萬花筒
+    </label>
+    <span id="kaleidoscope-setting" style="display:none;">
+      <label style="color:#222;font-weight:bold;">分割：</label>
+      <select id="kaleidoscopeSeg">
+        <option value="6">6</option>
+        <option value="8">8</option>
+        <option value="10">10</option>
+        <option value="12">12</option>
+        <option value="16">16</option>
+      </select>
+    </span>
   </div>
   <script>
     const canvas = document.getElementById('stained-glass-bg');
@@ -65,8 +78,22 @@
     });
 
     let theme = "rainbow";
-    document.getElementById('themeSel').addEventListener('change', e => {
+    const themeSel = document.getElementById('themeSel');
+    const kaleidoToggle = document.getElementById('kaleidoToggle');
+    const kaleidoSetting = document.getElementById('kaleidoscope-setting');
+    const kaleidoSegSel = document.getElementById('kaleidoscopeSeg');
+    let kaleidoSeg = parseInt(kaleidoSegSel.value, 10);
+    let kaleidoOn = false;
+
+    themeSel.addEventListener('change', e => {
       theme = e.target.value;
+    });
+    kaleidoSegSel.addEventListener('change', e => {
+      kaleidoSeg = parseInt(e.target.value, 10);
+    });
+    kaleidoToggle.addEventListener('change', e => {
+      kaleidoOn = kaleidoToggle.checked;
+      kaleidoSetting.style.display = kaleidoOn ? '' : 'none';
     });
 
     function getThemeHue(baseHue, idx) {
@@ -102,14 +129,97 @@
       const delaunay = d3.Delaunay.from(points, d => d.x, d => d.y);
       const voronoi = delaunay.voronoi([0, 0, w, h]);
 
+      if (kaleidoOn) {
+        drawKaleidoscopeSector(voronoi);
+      } else {
+        for (let i = 0; i < points.length; i++) {
+          const cell = voronoi.cellPolygon(i);
+          if (!cell) continue;
+          let p = points[i];
+          // 主題色調
+          let hue = getThemeHue(p.hue, i);
+          let sat = 75;
+          let light = 60;
+
+          // 互動：滑鼠靠近時加亮
+          let dx = p.x - mouse.x, dy = p.y - mouse.y;
+          let dist = Math.sqrt(dx*dx + dy*dy);
+          let maxDist = Math.min(w, h) * 0.25;
+          if (dist < maxDist) {
+            let boost = 25 * (1 - dist / maxDist);
+            light = Math.min(100, light + boost);
+          }
+
+          let color = hslToRgb(hue/360, sat/100, light/100);
+
+          ctx.beginPath();
+          ctx.moveTo(cell[0][0], cell[0][1]);
+          for (let j = 1; j < cell.length; j++) {
+            ctx.lineTo(cell[j][0], cell[j][1]);
+          }
+          ctx.closePath();
+          ctx.fillStyle = `rgb(${color[0]},${color[1]},${color[2]})`;
+          ctx.fill();
+
+          // 畫圓滑黑邊
+          ctx.save();
+          ctx.strokeStyle = "#222";
+          ctx.lineWidth = 2.2;
+          ctx.shadowColor = "#000";
+          ctx.shadowBlur = 2;
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+
+      requestAnimationFrame(drawVoronoi);
+    }
+
+    // 只繪製一個扇形區域，然後旋轉/鏡像複製
+    function drawKaleidoscopeSector(voronoi) {
+      const cx = w / 2, cy = h / 2;
+      const seg = kaleidoSeg;
+      const angleStep = 2 * Math.PI / seg;
+
+      // 建立離屏 canvas
+      const off = document.createElement('canvas');
+      off.width = w;
+      off.height = h;
+      const offCtx = off.getContext('2d');
+      offCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      // 只畫一個扇形
+      offCtx.save();
+      offCtx.translate(cx, cy);
+      offCtx.beginPath();
+      offCtx.moveTo(0, 0);
+      offCtx.arc(0, 0, Math.max(w, h), 0, angleStep);
+      offCtx.closePath();
+      offCtx.clip();
+      offCtx.translate(-cx, -cy);
+
+      // 在這個扇形內畫所有 cell
       for (let i = 0; i < points.length; i++) {
         const cell = voronoi.cellPolygon(i);
         if (!cell) continue;
         let p = points[i];
-        // 主題色調
+        // 使用主題色調
         let hue = getThemeHue(p.hue, i);
-        let sat = 75;
-        let light = 60;
+        let sat = 75, light = 60;
+        // 根據主題微調飽和度與亮度
+        switch(theme) {
+          case "mono-blue":
+          case "mono-green":
+          case "mono-red":
+          case "mono-yellow":
+          case "mono-purple":
+            sat = 80; light = 60; break;
+          case "warm":
+          case "cool":
+            sat = 75; light = 65; break;
+          default:
+            sat = 75; light = 60;
+        }
 
         // 互動：滑鼠靠近時加亮
         let dx = p.x - mouse.x, dy = p.y - mouse.y;
@@ -119,29 +229,36 @@
           let boost = 25 * (1 - dist / maxDist);
           light = Math.min(100, light + boost);
         }
-
         let color = hslToRgb(hue/360, sat/100, light/100);
 
-        ctx.beginPath();
-        ctx.moveTo(cell[0][0], cell[0][1]);
+        offCtx.beginPath();
+        offCtx.moveTo(cell[0][0], cell[0][1]);
         for (let j = 1; j < cell.length; j++) {
-          ctx.lineTo(cell[j][0], cell[j][1]);
+          offCtx.lineTo(cell[j][0], cell[j][1]);
         }
-        ctx.closePath();
-        ctx.fillStyle = `rgb(${color[0]},${color[1]},${color[2]})`;
-        ctx.fill();
+        offCtx.closePath();
+        offCtx.fillStyle = `rgb(${color[0]},${color[1]},${color[2]})`;
+        offCtx.fill();
 
         // 畫圓滑黑邊
+        offCtx.save();
+        offCtx.strokeStyle = "#222";
+        offCtx.lineWidth = 2.2;
+        offCtx.shadowColor = "#000";
+        offCtx.shadowBlur = 2;
+        offCtx.stroke();
+        offCtx.restore();
+      }
+      offCtx.restore();
+
+      // 將這個扇形多次旋轉複製到主 canvas
+      for (let s = 0; s < seg; s++) {
         ctx.save();
-        ctx.strokeStyle = "#222";
-        ctx.lineWidth = 2.2;
-        ctx.shadowColor = "#000";
-        ctx.shadowBlur = 2;
-        ctx.stroke();
+        ctx.translate(cx, cy);
+        ctx.rotate(s * angleStep);
+        ctx.drawImage(off, -cx, -cy);
         ctx.restore();
       }
-
-      requestAnimationFrame(drawVoronoi);
     }
 
     // HSL to RGB helper

@@ -17,6 +17,19 @@
 </head>
 <body>
   <canvas id="stained-glass-bg"></canvas>
+  <div style="position:fixed;top:16px;right:24px;z-index:2;">
+    <label style="color:#222;font-weight:bold;">主題：</label>
+    <select id="themeSel">
+      <option value="rainbow">彩虹</option>
+      <option value="warm">暖色</option>
+      <option value="cool">冷色</option>
+      <option value="mono-blue">單色藍</option>
+      <option value="mono-green">單色綠</option>
+      <option value="mono-red">單色紅</option>
+      <option value="mono-yellow">單色黃</option>
+      <option value="mono-purple">單色紫</option>
+    </select>
+  </div>
   <script>
     const canvas = document.getElementById('stained-glass-bg');
     const ctx = canvas.getContext('2d');
@@ -51,6 +64,32 @@
       mouse.y = (e.clientY - rect.top) * h / rect.height;
     });
 
+    let theme = "rainbow";
+    document.getElementById('themeSel').addEventListener('change', e => {
+      theme = e.target.value;
+    });
+
+    function getThemeHue(baseHue, idx) {
+      switch(theme) {
+        case "warm":
+          return 20 + 40 * Math.sin(idx * 0.7 + baseHue / 180 * Math.PI);
+        case "cool":
+          return 180 + 60 * Math.sin(idx * 0.8 + baseHue / 180 * Math.PI);
+        case "mono-blue":
+          return 210 + 10 * Math.sin(idx + baseHue / 30); // 輕微變化
+        case "mono-green":
+          return 120 + 10 * Math.sin(idx + baseHue / 30);
+        case "mono-red":
+          return 0 + 10 * Math.sin(idx + baseHue / 30);
+        case "mono-yellow":
+          return 50 + 10 * Math.sin(idx + baseHue / 30);
+        case "mono-purple":
+          return 280 + 10 * Math.sin(idx + baseHue / 30);
+        default: // 彩虹
+          return baseHue;
+      }
+    }
+
     function drawVoronoi() {
       ctx.clearRect(0, 0, w, h);
 
@@ -67,7 +106,8 @@
         const cell = voronoi.cellPolygon(i);
         if (!cell) continue;
         let p = points[i];
-        let hue = p.hue;
+        // 主題色調
+        let hue = getThemeHue(p.hue, i);
         let sat = 75;
         let light = 60;
 

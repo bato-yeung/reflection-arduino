@@ -49,6 +49,10 @@
     <label style="color:#222;font-weight:bold;">
       <input type="checkbox" id="highlightXToggle"> X軸高亮
     </label>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <button id="serialBtn">選擇連接埠</button>
+      <span id="serialStatus" style="color:#222;font-size:90%;">未連接</span>
+    </div>
   </div>
   <script>
     const canvas = document.getElementById('stained-glass-bg');
@@ -107,6 +111,65 @@
     highlightXToggle.addEventListener('change', e => {
       highlightX = highlightXToggle.checked;
     });
+
+    // Web Serial 相關
+    let port = null;
+    let reader = null;
+    const serialBtn = document.getElementById('serialBtn');
+    const serialStatus = document.getElementById('serialStatus');
+
+    async function connectSerial() {
+      if (!('serial' in navigator)) {
+        serialStatus.textContent = "瀏覽器不支援 Web Serial";
+        return;
+      }
+      try {
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 9600 });
+        serialStatus.textContent = "已連接";
+        startReadSerial();
+      } catch (e) {
+        serialStatus.textContent = "連接失敗";
+      }
+    }
+
+    serialBtn.addEventListener('click', connectSerial);
+
+    // 讀取 Arduino 資料並處理
+    async function startReadSerial() {
+      if (!port) return;
+      try {
+        reader = port.readable.getReader();
+        let decoder = new TextDecoder();
+        let buffer = "";
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (value) {
+            buffer += decoder.decode(value, {stream:true});
+            let lines = buffer.split('\n');
+            buffer = lines.pop();
+            for (let line of lines) {
+              handleArduinoInput(line.trim());
+            }
+          }
+        }
+      } catch (e) {
+        serialStatus.textContent = "讀取中斷";
+      }
+    }
+
+    // 根據 Arduino 傳來的 input 控制畫面
+    function handleArduinoInput(line) {
+      // 只處理 mouse x 取代
+      if (line.startsWith("mouseX:")) {
+        const val = parseFloat(line.slice(7));
+        if (!isNaN(val)) {
+          mouse.x = val * w; // 假設 Arduino 傳 0~1 的比例
+        }
+      }
+      // ...可擴充其他指令...
+    }
 
     function getThemeHue(baseHue, idx) {
       switch(theme) {

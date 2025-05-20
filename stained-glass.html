@@ -17,31 +17,38 @@
 </head>
 <body>
   <canvas id="stained-glass-bg"></canvas>
-  <div style="position:fixed;top:16px;right:24px;z-index:2;">
-    <label style="color:#222;font-weight:bold;">主題：</label>
-    <select id="themeSel">
-      <option value="rainbow">彩虹</option>
-      <option value="warm">暖色</option>
-      <option value="cool">冷色</option>
-      <option value="mono-blue">單色藍</option>
-      <option value="mono-green">單色綠</option>
-      <option value="mono-red">單色紅</option>
-      <option value="mono-yellow">單色黃</option>
-      <option value="mono-purple">單色紫</option>
-    </select>
-    <label style="color:#222;font-weight:bold;margin-left:12px;">
-      <input type="checkbox" id="kaleidoToggle"> 萬花筒
-    </label>
-    <span id="kaleidoscope-setting" style="display:none;">
-      <label style="color:#222;font-weight:bold;">分割：</label>
-      <select id="kaleidoscopeSeg">
-        <option value="6">6</option>
-        <option value="8">8</option>
-        <option value="10">10</option>
-        <option value="12">12</option>
-        <option value="16">16</option>
+  <div style="position:fixed;top:16px;right:24px;z-index:2;display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <label style="color:#222;font-weight:bold;">主題：</label>
+      <select id="themeSel">
+        <option value="rainbow">彩虹</option>
+        <option value="warm">暖色</option>
+        <option value="cool">冷色</option>
+        <option value="mono-blue">單色藍</option>
+        <option value="mono-green">單色綠</option>
+        <option value="mono-red">單色紅</option>
+        <option value="mono-yellow">單色黃</option>
+        <option value="mono-purple">單色紫</option>
       </select>
-    </span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <label style="color:#222;font-weight:bold;margin:0;">
+        <input type="checkbox" id="kaleidoToggle"> 萬花筒
+      </label>
+      <span id="kaleidoscope-setting" style="display:none;">
+        <label style="color:#222;font-weight:bold;margin:0;">分割：</label>
+        <select id="kaleidoscopeSeg">
+          <option value="6">6</option>
+          <option value="8">8</option>
+          <option value="10">10</option>
+          <option value="12">12</option>
+          <option value="16">16</option>
+        </select>
+      </span>
+    </div>
+    <label style="color:#222;font-weight:bold;">
+      <input type="checkbox" id="highlightXToggle"> X軸高亮
+    </label>
   </div>
   <script>
     const canvas = document.getElementById('stained-glass-bg');
@@ -84,6 +91,8 @@
     const kaleidoSegSel = document.getElementById('kaleidoscopeSeg');
     let kaleidoSeg = parseInt(kaleidoSegSel.value, 10);
     let kaleidoOn = false;
+    const highlightXToggle = document.getElementById('highlightXToggle');
+    let highlightX = false;
 
     themeSel.addEventListener('change', e => {
       theme = e.target.value;
@@ -94,6 +103,9 @@
     kaleidoToggle.addEventListener('change', e => {
       kaleidoOn = kaleidoToggle.checked;
       kaleidoSetting.style.display = kaleidoOn ? '' : 'none';
+    });
+    highlightXToggle.addEventListener('change', e => {
+      highlightX = highlightXToggle.checked;
     });
 
     function getThemeHue(baseHue, idx) {
@@ -136,15 +148,20 @@
           const cell = voronoi.cellPolygon(i);
           if (!cell) continue;
           let p = points[i];
-          // 主題色調
           let hue = getThemeHue(p.hue, i);
           let sat = 75;
           let light = 60;
 
           // 互動：滑鼠靠近時加亮
-          let dx = p.x - mouse.x, dy = p.y - mouse.y;
-          let dist = Math.sqrt(dx*dx + dy*dy);
-          let maxDist = Math.min(w, h) * 0.25;
+          let dist, maxDist;
+          if (highlightX) {
+            dist = Math.abs(p.x - mouse.x);
+            maxDist = w * 0.12;
+          } else {
+            let dx = p.x - mouse.x, dy = p.y - mouse.y;
+            dist = Math.sqrt(dx*dx + dy*dy);
+            maxDist = Math.min(w, h) * 0.25;
+          }
           if (dist < maxDist) {
             let boost = 25 * (1 - dist / maxDist);
             light = Math.min(100, light + boost);
@@ -203,10 +220,8 @@
         const cell = voronoi.cellPolygon(i);
         if (!cell) continue;
         let p = points[i];
-        // 使用主題色調
         let hue = getThemeHue(p.hue, i);
         let sat = 75, light = 60;
-        // 根據主題微調飽和度與亮度
         switch(theme) {
           case "mono-blue":
           case "mono-green":
@@ -222,9 +237,15 @@
         }
 
         // 互動：滑鼠靠近時加亮
-        let dx = p.x - mouse.x, dy = p.y - mouse.y;
-        let dist = Math.sqrt(dx*dx + dy*dy);
-        let maxDist = Math.min(w, h) * 0.25;
+        let dist, maxDist;
+        if (highlightX) {
+          dist = Math.abs(p.x - mouse.x);
+          maxDist = w * 0.12;
+        } else {
+          let dx = p.x - mouse.x, dy = p.y - mouse.y;
+          dist = Math.sqrt(dx*dx + dy*dy);
+          maxDist = Math.min(w, h) * 0.25;
+        }
         if (dist < maxDist) {
           let boost = 25 * (1 - dist / maxDist);
           light = Math.min(100, light + boost);

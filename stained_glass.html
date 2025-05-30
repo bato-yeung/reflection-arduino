@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <title>首頁 - 彩繪玻璃動態背景</title>
   <style>
-    body, html { margin: 0; padding: 0; overflow: hidden; }
+    body, html { margin: 0; padding: 0; overflow: hidden; background: #000; }
     #stained-glass-bg {
       position: fixed;
       left: 0; top: 0; width: 100vw; height: 100vh;
@@ -17,7 +17,8 @@
 </head>
 <body>
   <canvas id="stained-glass-bg"></canvas>
-  <div style="position:fixed;top:16px;right:24px;z-index:2;display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+  <button id="settingToggleBtn" style="position:fixed;top:16px;right:16px;z-index:10;padding:4px 12px;font-size:16px;">☰ 設定</button>
+  <div id="settingPanel" style="position:fixed;top:56px;right:24px;z-index:2;display:flex;flex-direction:column;align-items:flex-end;gap:8px;background:rgba(255,255,255,0.95);border-radius:8px;padding:12px 16px;box-shadow:0 2px 12px #0002;">
     <div style="display:flex;align-items:center;gap:8px;">
       <label style="color:#222;font-weight:bold;">主題：</label>
       <select id="themeSel">
@@ -52,6 +53,19 @@
     <div style="display:flex;align-items:center;gap:8px;">
       <button id="serialBtn">選擇連接埠</button>
       <span id="serialStatus" style="color:#222;font-size:90%;">未連接</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <label style="color:#222;font-weight:bold;margin:0;">捲軸效果</label>
+      <input type="range" id="scrollSpeedRange" min="0" max="2" step="0.01" value="0.5" style="width:80px;">
+      <span id="scrollSpeedVal" style="color:#222;">0.50</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <label style="color:#222;font-weight:bold;margin:0;">Viewport</label>
+      X:<input id="vpX" type="number" value="0" style="width:48px;">
+      Y:<input id="vpY" type="number" value="0" style="width:48px;">
+      W:<input id="vpW" type="number" value="400" style="width:56px;">
+      H:<input id="vpH" type="number" value="300" style="width:56px;">
+      <button id="vpReset" style="font-size:90%;">全畫面</button>
     </div>
   </div>
   <script>
@@ -192,12 +206,60 @@
       }
     }
 
+    // 捲軸效果控制
+    const scrollSpeedRange = document.getElementById('scrollSpeedRange');
+    const scrollSpeedVal = document.getElementById('scrollSpeedVal');
+    let scrollSpeed = parseFloat(scrollSpeedRange.value);
+
+    scrollSpeedRange.addEventListener('input', () => {
+      scrollSpeed = parseFloat(scrollSpeedRange.value);
+      scrollSpeedVal.textContent = scrollSpeed.toFixed(2);
+    });
+
+    // Viewport 設定
+    const vpX = document.getElementById('vpX');
+    const vpY = document.getElementById('vpY');
+    const vpW = document.getElementById('vpW');
+    const vpH = document.getElementById('vpH');
+    const vpReset = document.getElementById('vpReset');
+    let viewport = { x: 0, y: 0, w: 400, h: 300, enabled: true };
+
+    function updateViewport() {
+      viewport.x = parseInt(vpX.value, 10) || 0;
+      viewport.y = parseInt(vpY.value, 10) || 0;
+      viewport.w = parseInt(vpW.value, 10) || w;
+      viewport.h = parseInt(vpH.value, 10) || h;
+      viewport.enabled = true;
+    }
+    vpX.addEventListener('input', updateViewport);
+    vpY.addEventListener('input', updateViewport);
+    vpW.addEventListener('input', updateViewport);
+    vpH.addEventListener('input', updateViewport);
+    vpReset.addEventListener('click', () => {
+      vpX.value = 0; vpY.value = 0; vpW.value = w; vpH.value = h;
+      updateViewport();
+      viewport.enabled = false;
+    });
+
     function drawVoronoi() {
       ctx.clearRect(0, 0, w, h);
 
-      // 動態調整每個點的色相
+      // Viewport 裁切
+      if (viewport.enabled) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(viewport.x, viewport.y, viewport.w, viewport.h);
+        ctx.clip();
+      }
+
+      // 捲軸效果參數
+      if (!drawVoronoi.scrollOffset) drawVoronoi.scrollOffset = 0;
+      drawVoronoi.scrollOffset = (drawVoronoi.scrollOffset + scrollSpeed) % w;
+
+      // 動態調整每個點的色相與 x 位置
       for (let p of points) {
         p.hue = (p.hue + p.speed) % 360;
+        p.x = (p.x + scrollSpeed) % (w + 80); // 80: buffer for cell size
       }
 
       // 用 d3-delaunay 計算 Voronoi
@@ -252,6 +314,10 @@
         }
       }
 
+      if (viewport.enabled) {
+        ctx.restore();
+      }
+
       requestAnimationFrame(drawVoronoi);
     }
 
@@ -260,6 +326,9 @@
       const cx = w / 2, cy = h / 2;
       const seg = kaleidoSeg;
       const angleStep = 2 * Math.PI / seg;
+
+      // Debug log
+      // console.log("Kaleidoscope center:", cx, cy);
 
       // 建立離屏 canvas
       const off = document.createElement('canvas');
@@ -379,6 +448,20 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       randomPoints();
     });
+
+    // 初始化 viewport 為全畫面
+    vpReset.click();
+
+    // 設定面板開關
+    const settingToggleBtn = document.getElementById('settingToggleBtn');
+    const settingPanel = document.getElementById('settingPanel');
+    let settingPanelVisible = true;
+    settingToggleBtn.addEventListener('click', () => {
+      settingPanelVisible = !settingPanelVisible;
+      settingPanel.style.display = settingPanelVisible ? 'flex' : 'none';
+    });
+    // 預設顯示
+    settingPanel.style.display = 'flex';
 
     drawVoronoi();
   </script>
